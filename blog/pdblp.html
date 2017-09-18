@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en" prefix="og: http://ogp.me/ns# fb: https://www.facebook.com/2008/fbml">
+<head>
+    <title>Intro to pdblp - matthewdgilbert</title>
+    <!-- Using the latest rendering mode for IE -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+
+
+<link rel="canonical" href="http://www.matthewdgilbert.com/blog/pdblp.html">
+
+        <meta name="author" content="Matthew Gilbert" />
+        <meta name="description" content="This is a simple introduction to pdblp, a wrapper for easy Bloomberg and pandas integration" />
+
+        <meta property="og:site_name" content="matthewdgilbert" />
+        <meta property="og:type" content="article"/>
+        <meta property="og:title" content="Intro to pdblp"/>
+        <meta property="og:url" content="http://www.matthewdgilbert.com/blog/pdblp.html"/>
+        <meta property="og:description" content="This is a simple introduction to pdblp, a wrapper for easy Bloomberg and pandas integration"/>
+        <meta property="article:published_time" content="2015-06-21" />
+            <meta property="article:section" content="blog" />
+            <meta property="article:author" content="Matthew Gilbert" />
+
+
+    <!-- Bootstrap -->
+        <link rel="stylesheet" href="http://www.matthewdgilbert.com/theme/css/bootstrap.readable-old.min.css" type="text/css"/>
+    <link href="http://www.matthewdgilbert.com/theme/css/font-awesome.min.css" rel="stylesheet">
+
+    <!--link href="http://www.matthewdgilbert.com/theme/css/pygments/github.css" rel="stylesheet"-->
+    <link href="http://www.matthewdgilbert.com/theme/css/prism.css" rel="stylesheet" />
+    <link rel="stylesheet" href="http://www.matthewdgilbert.com/theme/css/style.css" type="text/css"/>
+        <link href="http://www.matthewdgilbert.com/static/custom.css" rel="stylesheet">
+
+        <link href="http://www.matthewdgilbert.com/feeds/all.atom.xml" type="application/atom+xml" rel="alternate"
+              title="matthewdgilbert ATOM Feed"/>
+
+
+
+        <link href="http://www.matthewdgilbert.com/feeds/blog.atom.xml" type="application/atom+xml" rel="alternate"
+              title="matthewdgilbert blog ATOM Feed"/>
+
+
+</head>
+<body>
+
+<div class="navbar navbar-default navbar-fixed-top" role="navigation">
+	<div class="container">
+        <div class="navbar-header">
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-ex1-collapse">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            <a href="http://www.matthewdgilbert.com/" class="navbar-brand">
+matthewdgilbert            </a>
+        </div>
+        <div class="collapse navbar-collapse navbar-ex1-collapse">
+            <ul class="nav navbar-nav">
+                         <li><a href="http://www.matthewdgilbert.com/pages/about.html">
+                             About
+                          </a></li>
+            </ul>
+            <ul class="nav navbar-nav navbar-right">
+              <li><a href="http://www.matthewdgilbert.com/archives.html"><i class="fa fa-th-list"></i><span class="icon-label">Archives</span></a></li>
+            </ul>
+        </div>
+        <!-- /.navbar-collapse -->
+    </div>
+</div> <!-- /.navbar -->
+<!-- Banner -->
+<!-- End Banner -->
+<div class="container">
+    <div class="row">
+        <div class="col-lg-12">
+    <section id="content">
+        <article>
+            <header class="page-header">
+                <h1>
+                    <a href="http://www.matthewdgilbert.com/blog/pdblp.html"
+                       rel="bookmark"
+                       title="Permalink to Intro to pdblp">
+                        Intro to pdblp
+                    </a>
+                </h1>
+            </header>
+            <div class="entry-content">
+                <div class="panel">
+                    <div class="panel-body">
+<footer class="post-info">
+    <span class="label label-default">Date</span>
+    <span class="published">
+        <i class="fa fa-calendar"></i><time datetime="2015-06-21T00:00:00-04:00"> Sun 21 June 2015</time>
+    </span>
+
+
+
+
+
+    
+</footer><!-- /.post-info -->                    </div>
+                </div>
+                <p>This is a simple introduction to pdblp, a wrapper for easy Bloomberg and pandas integration</p>
+<pre><code class="language-python">%pylab inline
+import pdblp
+</code></pre>
+
+<pre><code>Populating the interactive namespace from numpy and matplotlib
+</code></pre>
+<p>The project <a href="https://github.com/MatthewGilbert/pdblp">pdblp</a> borrows heavily from the package by kyuni22, which is available <a href="https://github.com/kyuni22/pybbg">here</a>.</p>
+<p>The package currently wraps the Historical Data Request service and the Intraday Bar Request service. More details of the Open API can be found <a href="http://www.bloomberglabs.com/api/documentation/">here</a></p>
+<p>Before running this notebook you need to have access to a Bloomberg terminal on a windows machine and download and install pdblp</p>
+<pre><code class="language-bash">git clone https://github.com/MatthewGilbert/pdblp.git
+cd pdblp
+pip install -e pdblp
+</code></pre>
+
+<pre><code class="language-python">con = pdblp.BCon(debug=False)
+con.start()
+</code></pre>
+
+<pre><code class="language-python">print(con.bdh.__doc__)
+</code></pre>
+
+<pre><code>        Get tickers and fields, return pandas dataframe with column MultiIndex
+        of tickers and fields
+
+        Parameters
+        ----------
+        tickers: {list, string}
+            String or list of strings corresponding to tickers
+        flds: {list, string}
+            String or list of strings corresponding to FLDS
+        start_date: string
+            String in format YYYYmmdd
+        end_date: string
+            String in format YYYYmmdd
+</code></pre>
+<pre><code class="language-python">df = con.bdh(['SPY Equity', 'IWM Equity'], 'PX_LAST', '20150103', '20150619')
+</code></pre>
+
+<pre><code class="language-python">df.head()
+</code></pre>
+
+<div style="max-height:1000px;max-width:1500px;overflow:auto;">
+<table border="1" class="dataframe">
+  <thead>
+    <tr>
+      <th>ticker</th>
+      <th>IWM Equity</th>
+      <th>SPY Equity</th>
+    </tr>
+    <tr>
+      <th>field</th>
+      <th>PX_LAST</th>
+      <th>PX_LAST</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>2015-01-05</th>
+      <td> 117.34</td>
+      <td> 201.72</td>
+    </tr>
+    <tr>
+      <th>2015-01-06</th>
+      <td> 115.31</td>
+      <td> 199.82</td>
+    </tr>
+    <tr>
+      <th>2015-01-07</th>
+      <td> 116.73</td>
+      <td> 202.31</td>
+    </tr>
+    <tr>
+      <th>2015-01-08</th>
+      <td> 118.71</td>
+      <td> 205.90</td>
+    </tr>
+    <tr>
+      <th>2015-01-09</th>
+      <td> 117.57</td>
+      <td> 204.25</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<pre><code class="language-python">df.plot(figsize=(12,8))
+</code></pre>
+
+<pre><code>&lt;matplotlib.axes._subplots.AxesSubplot at 0xb62a828&gt;
+</code></pre>
+<p><img alt="png" src="2015-06-21_pdblp_files/2015-06-21_pdblp_7_1.png" /></p>
+<p>The bdh() function call returns a MultiIndex by default to be a consistent type in case multiple fields are requested</p>
+<pre><code class="language-python">df2 = con.bdh(['SPY Equity', 'IWM Equity'], ['PX_LAST', 'VOLUME'], '20150103', '20150619')
+</code></pre>
+
+<pre><code class="language-python">df2.head()
+</code></pre>
+
+<div style="max-height:1000px;max-width:1500px;overflow:auto;">
+<table border="1" class="dataframe">
+  <thead>
+    <tr>
+      <th>ticker</th>
+      <th colspan="2" halign="left">IWM Equity</th>
+      <th colspan="2" halign="left">SPY Equity</th>
+    </tr>
+    <tr>
+      <th>field</th>
+      <th>PX_LAST</th>
+      <th>VOLUME</th>
+      <th>PX_LAST</th>
+      <th>VOLUME</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>2015-01-05</th>
+      <td> 117.34</td>
+      <td> 51141891</td>
+      <td> 201.72</td>
+      <td> 169632646</td>
+    </tr>
+    <tr>
+      <th>2015-01-06</th>
+      <td> 115.31</td>
+      <td> 67446040</td>
+      <td> 199.82</td>
+      <td> 209151408</td>
+    </tr>
+    <tr>
+      <th>2015-01-07</th>
+      <td> 116.73</td>
+      <td> 32252095</td>
+      <td> 202.31</td>
+      <td> 125346709</td>
+    </tr>
+    <tr>
+      <th>2015-01-08</th>
+      <td> 118.71</td>
+      <td> 28361730</td>
+      <td> 205.90</td>
+      <td> 147217784</td>
+    </tr>
+    <tr>
+      <th>2015-01-09</th>
+      <td> 117.57</td>
+      <td> 26975175</td>
+      <td> 204.25</td>
+      <td> 158567288</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<pre><code class="language-python">print(con.bdib.__doc__)
+</code></pre>
+
+<pre><code>        Get Open, High, Low, Close, Volume, for a ticker.
+        Return pandas dataframe
+
+        Parameters
+        ----------
+        ticker: string
+            String corresponding to ticker
+        startDateTime: string
+            UTC datetime in format YYYY-mm-ddTHH:MM:SS
+        endDateTime: string
+            UTC datetime in format YYYY-mm-ddTHH:MM:SS
+        eventType: string {TRADE, BID, ASK, BID_BEST, ASK_BEST, BEST_BID,
+                           BEST_ASK}
+            Requested data event type
+        interval: int {1... 1440}
+            Length of time bars
+</code></pre>
+<pre><code class="language-python">df3 = con.bdib('SPY Equity', '2015-06-19T09:30:00', '2015-06-19T15:30:00',
+               eventType='TRADE', interval=15)
+</code></pre>
+
+<pre><code class="language-python">df3.head()
+</code></pre>
+
+<div style="max-height:1000px;max-width:1500px;overflow:auto;">
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>open</th>
+      <th>high</th>
+      <th>low</th>
+      <th>close</th>
+      <th>volume</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>2015-06-19 13:30:00</th>
+      <td> 211.460</td>
+      <td> 211.520</td>
+      <td> 211.090</td>
+      <td> 211.3573</td>
+      <td> 9061632</td>
+    </tr>
+    <tr>
+      <th>2015-06-19 13:45:00</th>
+      <td> 211.360</td>
+      <td> 211.405</td>
+      <td> 211.100</td>
+      <td> 211.3600</td>
+      <td> 4212470</td>
+    </tr>
+    <tr>
+      <th>2015-06-19 14:00:00</th>
+      <td> 211.350</td>
+      <td> 211.550</td>
+      <td> 211.320</td>
+      <td> 211.4299</td>
+      <td> 3659095</td>
+    </tr>
+    <tr>
+      <th>2015-06-19 14:15:00</th>
+      <td> 211.430</td>
+      <td> 211.550</td>
+      <td> 211.325</td>
+      <td> 211.4550</td>
+      <td> 2186267</td>
+    </tr>
+    <tr>
+      <th>2015-06-19 14:30:00</th>
+      <td> 211.459</td>
+      <td> 211.520</td>
+      <td> 211.260</td>
+      <td> 211.3300</td>
+      <td> 2352812</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p>Simple typos can result in somewhat cryptic errors since the service returns a well format response which fails far downstream when a pandas object is attempted to be instantiated, as can be seen below.</p>
+<pre><code class="language-python">con.bdh('SPY Equitys', 'PX_LAST', '20150103', '20150619')
+</code></pre>
+
+<pre><code class="language-python">    ---------------------------------------------------------------------------
+
+    TypeError                                 Traceback (most recent call last)
+
+    &lt;ipython-input-12-fbd4efd0f296&gt; in &lt;module&gt;()
+    ----&gt; 1 con.bdh('SPY Equitys', 'PX_LAST', '20150103', '20150619')
+
+
+    c:\users\matthew\sandbox\pdblp\pdblp\pdblp.pyc in bdh(self, tickers, flds, start_date, end_date, periodselection)
+        126         data = DataFrame(data)
+        127         data.columns = pd.MultiIndex.from_tuples(
+    --&gt; 128             data, names=['ticker', 'field']
+        129         )
+        130         data.index = pd.to_datetime(data.index)
+
+
+    C:\Anaconda\lib\site-packages\pandas\core\index.pyc in from_tuples(cls, tuples, sortorder, names)
+       3521         if len(tuples) == 0:
+       3522             # I think this is right? Not quite sure...
+    -&gt; 3523             raise TypeError('Cannot infer number of levels from empty list')
+       3524 
+       3525         if isinstance(tuples, (np.ndarray, Index)):
+
+
+    TypeError: Cannot infer number of levels from empty list
+</code></pre>
+
+<p>There is a debug flag which prints the request/response to stdout so this type of error can be easily found.</p>
+<pre><code class="language-python">con.debug = True
+</code></pre>
+
+<pre><code class="language-python">con.bdh('SPY Equitys', 'PX_LAST', '20150103', '20150619')
+</code></pre>
+
+<pre><code class="language-python">DEBUG:root:Sending Request:
+ HistoricalDataRequest = {
+    securities[] = {
+        &quot;SPY Equitys&quot;
+    }
+    fields[] = {
+        &quot;PX_LAST&quot;
+    }
+    periodicityAdjustment = ACTUAL
+    periodicitySelection = DAILY
+    startDate = &quot;20150103&quot;
+    endDate = &quot;20150619&quot;
+}
+
+DEBUG:root:Message Received:
+ HistoricalDataResponse = {
+    securityData = {
+        security = &quot;SPY Equitys&quot;
+        eidData[] = {
+        }
+        sequenceNumber = 0
+        securityError = {
+            source = &quot;809::bbdbh6&quot;
+            code = 15
+            category = &quot;BAD_SEC&quot;
+            message = &quot;Unknown/Invalid securityInvalid Security [nid:809] &quot;
+            subcategory = &quot;INVALID_SECURITY&quot;
+        }
+        fieldExceptions[] = {
+        }
+        fieldData[] = {
+        }
+    }
+}
+
+
+
+
+---------------------------------------------------------------------------
+
+TypeError                                 Traceback (most recent call last)
+
+&lt;ipython-input-14-fbd4efd0f296&gt; in &lt;module&gt;()
+----&gt; 1 con.bdh('SPY Equitys', 'PX_LAST', '20150103', '20150619')
+
+
+c:\users\matthew\sandbox\pdblp\pdblp\pdblp.pyc in bdh(self, tickers, flds, start_date, end_date, periodselection)
+    126         data = DataFrame(data)
+    127         data.columns = pd.MultiIndex.from_tuples(
+--&gt; 128             data, names=['ticker', 'field']
+    129         )
+    130         data.index = pd.to_datetime(data.index)
+
+
+C:\Anaconda\lib\site-packages\pandas\core\index.pyc in from_tuples(cls, tuples, sortorder, names)
+   3521         if len(tuples) == 0:
+   3522             # I think this is right? Not quite sure...
+-&gt; 3523             raise TypeError('Cannot infer number of levels from empty list')
+   3524 
+   3525         if isinstance(tuples, (np.ndarray, Index)):
+
+
+TypeError: Cannot infer number of levels from empty list
+</code></pre>
+            </div>
+            <!-- /.entry-content -->
+        </article>
+    </section>
+
+        </div>
+    </div>
+</div>
+<footer>
+   <div class="container">
+      <hr>
+      <div class="row">
+         <div class="col-xs-10">&copy; 2017 Matthew Gilbert
+            &middot; Powered by <a href="https://github.com/DandyDev/pelican-bootstrap3" target="_blank">pelican-bootstrap3</a>,
+            <a href="http://docs.getpelican.com/" target="_blank">Pelican</a>,
+            <a href="http://getbootstrap.com" target="_blank">Bootstrap</a>              <p><small>The views expressed on this site are my own and do not reflect those of my employer</small></p>
+         </div>
+         <div class="col-xs-2"><p class="pull-right"><i class="fa fa-arrow-up"></i> <a href="#">Back to top</a></p></div>
+      </div>
+   </div>
+</footer>
+<script src="http://www.matthewdgilbert.com/theme/js/jquery.min.js"></script>
+
+<!-- Include all compiled plugins (below), or include individual files as needed -->
+<script src="http://www.matthewdgilbert.com/theme/js/bootstrap.min.js"></script>
+
+<!-- Enable responsive features in IE8 with Respond.js (https://github.com/scottjehl/Respond) -->
+<script src="http://www.matthewdgilbert.com/theme/js/respond.min.js"></script>
+
+    <script src="http://www.matthewdgilbert.com/theme/js/bodypadding.js"></script>
+    <!-- Google Analytics -->
+    <script type="text/javascript">
+
+        var _gaq = _gaq || [];
+        _gaq.push(['_setAccount', 'UA-60327105-1']);
+        _gaq.push(['_trackPageview']);
+
+        (function () {
+            var ga = document.createElement('script');
+            ga.type = 'text/javascript';
+            ga.async = true;
+            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(ga, s);
+        })();
+    </script>
+    <!-- End Google Analytics Code -->
+
+<script src="http://www.matthewdgilbert.com/theme/js/prism.js"></script>
+</body>
+</html>

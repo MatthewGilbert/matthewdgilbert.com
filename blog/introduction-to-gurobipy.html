@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en" prefix="og: http://ogp.me/ns# fb: https://www.facebook.com/2008/fbml">
+<head>
+    <title>Introduction to gurobipy - matthewdgilbert</title>
+    <!-- Using the latest rendering mode for IE -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+
+
+<link rel="canonical" href="http://www.matthewdgilbert.com/blog/introduction-to-gurobipy.html">
+
+        <meta name="author" content="Matthew Gilbert" />
+        <meta name="description" content="I recently played around with gurobipy, the excellent python wrapper to Gurobi, and wanted to summarize my experience. Gurobi is a commercial solver but has a free restricted licenses for academics and online coursework. First you need to install gurobipy, download gurobi from http://www.gurobi.com/downloads/gurobi-optimizer untar ..." />
+
+        <meta property="og:site_name" content="matthewdgilbert" />
+        <meta property="og:type" content="article"/>
+        <meta property="og:title" content="Introduction to gurobipy"/>
+        <meta property="og:url" content="http://www.matthewdgilbert.com/blog/introduction-to-gurobipy.html"/>
+        <meta property="og:description" content="I recently played around with gurobipy, the excellent python wrapper to Gurobi, and wanted to summarize my experience. Gurobi is a commercial solver but has a free restricted licenses for academics and online coursework. First you need to install gurobipy, download gurobi from http://www.gurobi.com/downloads/gurobi-optimizer untar ..."/>
+        <meta property="article:published_time" content="2017-09-10" />
+            <meta property="article:section" content="blog" />
+            <meta property="article:author" content="Matthew Gilbert" />
+
+
+    <!-- Bootstrap -->
+        <link rel="stylesheet" href="http://www.matthewdgilbert.com/theme/css/bootstrap.readable-old.min.css" type="text/css"/>
+    <link href="http://www.matthewdgilbert.com/theme/css/font-awesome.min.css" rel="stylesheet">
+
+    <!--link href="http://www.matthewdgilbert.com/theme/css/pygments/github.css" rel="stylesheet"-->
+    <link href="http://www.matthewdgilbert.com/theme/css/prism.css" rel="stylesheet" />
+    <link rel="stylesheet" href="http://www.matthewdgilbert.com/theme/css/style.css" type="text/css"/>
+        <link href="http://www.matthewdgilbert.com/static/custom.css" rel="stylesheet">
+
+        <link href="http://www.matthewdgilbert.com/feeds/all.atom.xml" type="application/atom+xml" rel="alternate"
+              title="matthewdgilbert ATOM Feed"/>
+
+
+
+        <link href="http://www.matthewdgilbert.com/feeds/blog.atom.xml" type="application/atom+xml" rel="alternate"
+              title="matthewdgilbert blog ATOM Feed"/>
+
+
+</head>
+<body>
+
+<div class="navbar navbar-default navbar-fixed-top" role="navigation">
+	<div class="container">
+        <div class="navbar-header">
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-ex1-collapse">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            <a href="http://www.matthewdgilbert.com/" class="navbar-brand">
+matthewdgilbert            </a>
+        </div>
+        <div class="collapse navbar-collapse navbar-ex1-collapse">
+            <ul class="nav navbar-nav">
+                         <li><a href="http://www.matthewdgilbert.com/pages/about.html">
+                             About
+                          </a></li>
+            </ul>
+            <ul class="nav navbar-nav navbar-right">
+              <li><a href="http://www.matthewdgilbert.com/archives.html"><i class="fa fa-th-list"></i><span class="icon-label">Archives</span></a></li>
+            </ul>
+        </div>
+        <!-- /.navbar-collapse -->
+    </div>
+</div> <!-- /.navbar -->
+<!-- Banner -->
+<!-- End Banner -->
+<div class="container">
+    <div class="row">
+        <div class="col-lg-12">
+    <section id="content">
+        <article>
+            <header class="page-header">
+                <h1>
+                    <a href="http://www.matthewdgilbert.com/blog/introduction-to-gurobipy.html"
+                       rel="bookmark"
+                       title="Permalink to Introduction to gurobipy">
+                        Introduction to gurobipy
+                    </a>
+                </h1>
+            </header>
+            <div class="entry-content">
+                <div class="panel">
+                    <div class="panel-body">
+<footer class="post-info">
+    <span class="label label-default">Date</span>
+    <span class="published">
+        <i class="fa fa-calendar"></i><time datetime="2017-09-10T00:00:00-04:00"> Sun 10 September 2017</time>
+    </span>
+
+
+
+
+
+    
+</footer><!-- /.post-info -->                    </div>
+                </div>
+                <p>I recently played around with <em>gurobipy</em>, the excellent <em>python</em> wrapper to <em>Gurobi</em>, and wanted to summarize my experience. <em>Gurobi</em> is a commercial solver but has a free restricted licenses for academics and online coursework.</p>
+<p>First you need to install gurobipy, download gurobi from http://www.gurobi.com/downloads/gurobi-optimizer
+untar to /opt</p>
+<p>Append the following to your .bashrc file, where gurobi701 may vary depending
+on the version of gurobi you installed</p>
+<pre><code class="language-bash">export GUROBI_HOME=&quot;/opt/gurobi701/linux64&quot;
+export PATH=&quot;${PATH}:${GUROBI_HOME}/bin&quot;
+export LD_LIBRARY_PATH=&quot;${LD_LIBRARY_PATH}:${GUROBI_HOME}/lib&quot;
+</code></pre>
+
+<p>Download a license from</p>
+<p>https://user.gurobi.com/download/licenses/free-online</p>
+<p>Install the python library using</p>
+<pre><code class="language-bash">cd /opt/gurobi701/linux64
+python setup.py install
+</code></pre>
+
+<h2>Hello world example</h2>
+<pre><code class="language-python">from gurobipy import *
+m = Model()
+m.setParam('OutputFlag', True)
+
+x = m.addVar(name='x')
+y = m.addVar(name='y')
+
+m.setObjective(3*x - y, GRB.MAXIMIZE)
+m.addConstr(x + y &lt;= 1, &quot;c1&quot;)
+
+m.update()
+m.optimize()
+
+for v in m.getVars():
+    print('%s %s' % (v.VarName, v.X))
+print('Obj: %s' % m.ObjVal)
+</code></pre>
+
+<pre><code>Parameter OutputFlag unchanged
+   Value: 1  Min: 0  Max: 1  Default: 1
+Optimize a model with 1 rows, 2 columns and 2 nonzeros
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  Objective range  [1e+00, 3e+00]
+  Bounds range     [0e+00, 0e+00]
+  RHS range        [1e+00, 1e+00]
+Presolve removed 1 rows and 2 columns
+Presolve time: 0.01s
+Presolve: All rows and columns removed
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0    3.0000000e+00   0.000000e+00   0.000000e+00      0s
+
+Solved in 0 iterations and 0.01 seconds
+Optimal objective  3.000000000e+00
+x 1.0
+y 0.0
+Obj: 3.0
+</code></pre>
+<h2>Mean Variance with Piecewise Linear Tcost</h2>
+<pre><code class="language-python">from gurobipy import *
+import numpy as np
+
+# Objective function
+#
+# max h'mu - h'Sh - (f(h1) + f(h2))
+#
+# where f() are piecewise linear
+
+
+def run_opti(current_holdings, alphas, covariance, tcosts=None, risk_aversion=1):
+
+    m = Model('portfolio')
+    m.setParam('OutputFlag', False)
+
+    # Create variables
+
+    lb = -1e9
+    ub = 1e9
+
+    holdings = pd.Series(m.addVars(alphas.index, lb=lb, ub=ub))
+
+    # Integrate new variables
+    var_obj = -risk_aversion * covariance.dot(holdings).dot(holdings)
+
+    if tcosts is not None:
+        # setting piecewise linear objectives overrides other linear objectives
+        # so include alpha in pwl
+        m.setObjective(var_obj, GRB.MAXIMIZE)
+
+        for ast in holdings.index:
+            tc = tcosts.trade_cost
+            centered_notional = list(tcosts.notional - current_holdings.loc[ast])
+            tcost_and_alpha = [-tcn + alphas.loc[ast] * ntnl for tcn, ntnl in zip(tc, centered_notional)]
+            m.setPWLObj(holdings.loc[ast], centered_notional, tcost_and_alpha)
+
+    else:
+        m.setObjective(alphas.dot(holdings) + var_obj, GRB.MAXIMIZE)
+
+    m.update()
+    m.optimize()
+
+    if m.Status == GRB.OPTIMAL:
+        print('Solution is optimal')
+    else:
+        print('Solution is not optimal')
+    for v in m.getVars():
+        print('%s %g' % (v.VarName, v.X))
+    print('Obj: %g' % m.ObjVal)
+    print('')
+
+    return holdings.apply(lambda x: x.X), m
+</code></pre>
+
+<pre><code class="language-python"># covariance matrix
+#   0.01    0.0091
+#   0.0091  0.0169
+import pandas as pd
+
+alphas = pd.Series((-3e-4, 5e-4), index=[&quot;A&quot;, &quot;B&quot;])
+risk_aversion = 0.000000006
+
+cov = pd.DataFrame([[0.01, 0.0091], [0.0091, 0.0169]], index=[&quot;A&quot;, &quot;B&quot;], columns=[&quot;A&quot;, &quot;B&quot;])
+
+notional = [-2.0000e9, -1.0000e9, -0.8000e9, -0.6000e9, -0.4000e9, -0.2500e9,
+    -0.1000e9, -0.0500e9, -0.0250e9, -0.0100e9, -0.0010e9, 0, 0.0010e9,
+    0.0100e9, 0.0250e9, 0.0500e9, 0.1000e9, 0.2500e9, 0.4000e9,
+    0.6000e9, 0.8000e9, 1.0000e9, 2.0000e9]
+
+trade_cost = [2.938964e6, 0.753364e6, 0.488104e6, 0.280144e6, 0.129472e6,
+    0.053766e6, 0.011007e6, 0.003751e6, 0.001435e6, 0.000465e6,
+    0.000037e6, 0, 0.000037e6, 0.000465e6, 0.001435e6, 0.003751e6,
+    0.011007e6, 0.053766e6, 0.129472e6, 0.280144e6, 0.488104e6,
+    0.753364e6, 2.938964e6]
+
+tcosts = pd.DataFrame({&quot;notional&quot;: notional, &quot;trade_cost&quot;: trade_cost})
+
+current_hlds = pd.Series(0, index=['A', 'B'])
+</code></pre>
+
+<pre><code class="language-python">import matplotlib.pyplot as plt
+plt.figure(figsize=(12,8))
+plt.plot(tcosts.notional, tcosts.trade_cost)
+plt.title(&quot;Tcost Curve&quot;)
+plt.show()
+</code></pre>
+
+<p><img alt="png" src="2017-09-10_gurobipy_files/2017-09-10_gurobipy_6_0.png" /></p>
+<h4>Inspecting the results with and without accounting for tcosts, you can see this is having the desired effect of slowing trading</h4>
+<pre><code class="language-python">ntc_hlds, _ = run_opti(current_hlds, alphas, cov, risk_aversion=risk_aversion)
+ntc_hlds.apply(lambda x: '${:,.2f}'.format(x))
+</code></pre>
+
+<pre><code>Solution is optimal
+C0 -9.30116e+06
+C1 7.4738e+06
+Obj: 3263.62
+
+
+
+
+
+
+A    $-9,301,156.36
+B     $7,473,798.20
+dtype: object
+</code></pre>
+<pre><code class="language-python">tc_hlds, model = run_opti(current_hlds, alphas, cov, tcosts, risk_aversion=risk_aversion)
+tc_hlds.apply(lambda x: '${:,.2f}'.format(x))
+</code></pre>
+
+<pre><code>Solution is optimal
+C0 -8.10569e+06
+C1 6.59559e+06
+Obj: 2536.3
+
+
+
+
+
+
+A    $-8,105,692.42
+B     $6,595,592.00
+dtype: object
+</code></pre>
+<h4>If you are having issues, a useful trick for debugging is to inspect the model by writing it out to an lp format</h4>
+<pre><code class="language-python">import tempfile
+fn = tempfile.mktemp(&quot;.lp&quot;)
+
+model.write(fn)
+!cat $fn
+</code></pre>
+
+<pre><code>\ Model portfolio
+\ LP format - for model browsing. Use MPS format to capture full model detail.
+Maximize
+  __pwl(C0) + __pwl(C1) + [ - 1.2e-10 C0 ^2 - 2.184e-10 C0 * C1
+   - 2.028e-10 C1 ^2 ] / 2
+Subject To
+Bounds
+ -1e+09 &lt;= C0 &lt;= 1e+09
+ -1e+09 &lt;= C1 &lt;= 1e+09
+PWLObj
+ C0: (-2e+09, -2.338964e+06) (-1e+09, -453364) (-8e+08, -248104)
+  (-6e+08, -100144) (-4e+08, -9472) (-2.5e+08, 21234) (-1e+08, 18993)
+  (-5e+07, 11249) (-2.5e+07, 6065) (-1e+07, 2535) (-1e+06, 263) (0, -0)
+  (1e+06, -337) (1e+07, -3465) (2.5e+07, -8935) (5e+07, -18751)
+  (1e+08, -41007) (2.5e+08, -128766) (4e+08, -249472) (6e+08, -460144)
+  (8e+08, -728104) (1e+09, -1.053364e+06) (2e+09, -3.538964e+06)
+ C1: (-2e+09, -3.938964e+06) (-1e+09, -1.253364e+06) (-8e+08, -888104)
+  (-6e+08, -580144) (-4e+08, -329472) (-2.5e+08, -178766) (-1e+08, -61007)
+  (-5e+07, -28751) (-2.5e+07, -13935) (-1e+07, -5465) (-1e+06, -537)
+  (0, 0) (1e+06, 463) (1e+07, 4535) (2.5e+07, 11065) (5e+07, 21249)
+  (1e+08, 38993) (2.5e+08, 71234) (4e+08, 70528) (6e+08, 19856)
+  (8e+08, -88104) (1e+09, -253364) (2e+09, -1.938964e+06)
+End
+</code></pre>
+            </div>
+            <!-- /.entry-content -->
+        </article>
+    </section>
+
+        </div>
+    </div>
+</div>
+<footer>
+   <div class="container">
+      <hr>
+      <div class="row">
+         <div class="col-xs-10">&copy; 2017 Matthew Gilbert
+            &middot; Powered by <a href="https://github.com/DandyDev/pelican-bootstrap3" target="_blank">pelican-bootstrap3</a>,
+            <a href="http://docs.getpelican.com/" target="_blank">Pelican</a>,
+            <a href="http://getbootstrap.com" target="_blank">Bootstrap</a>              <p><small>The views expressed on this site are my own and do not reflect those of my employer</small></p>
+         </div>
+         <div class="col-xs-2"><p class="pull-right"><i class="fa fa-arrow-up"></i> <a href="#">Back to top</a></p></div>
+      </div>
+   </div>
+</footer>
+<script src="http://www.matthewdgilbert.com/theme/js/jquery.min.js"></script>
+
+<!-- Include all compiled plugins (below), or include individual files as needed -->
+<script src="http://www.matthewdgilbert.com/theme/js/bootstrap.min.js"></script>
+
+<!-- Enable responsive features in IE8 with Respond.js (https://github.com/scottjehl/Respond) -->
+<script src="http://www.matthewdgilbert.com/theme/js/respond.min.js"></script>
+
+    <script src="http://www.matthewdgilbert.com/theme/js/bodypadding.js"></script>
+    <!-- Google Analytics -->
+    <script type="text/javascript">
+
+        var _gaq = _gaq || [];
+        _gaq.push(['_setAccount', 'UA-60327105-1']);
+        _gaq.push(['_trackPageview']);
+
+        (function () {
+            var ga = document.createElement('script');
+            ga.type = 'text/javascript';
+            ga.async = true;
+            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(ga, s);
+        })();
+    </script>
+    <!-- End Google Analytics Code -->
+
+<script src="http://www.matthewdgilbert.com/theme/js/prism.js"></script>
+</body>
+</html>

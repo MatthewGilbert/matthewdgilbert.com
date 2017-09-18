@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en" prefix="og: http://ogp.me/ns# fb: https://www.facebook.com/2008/fbml">
+<head>
+    <title>Data Mining - matthewdgilbert</title>
+    <!-- Using the latest rendering mode for IE -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+
+
+<link rel="canonical" href="http://www.matthewdgilbert.com/blog/data-mining.html">
+
+        <meta name="author" content="Matthew Gilbert" />
+        <meta name="description" content="This is an introduction to the pitfalls of data mining in the context of financial backtests" />
+
+        <meta property="og:site_name" content="matthewdgilbert" />
+        <meta property="og:type" content="article"/>
+        <meta property="og:title" content="Data Mining"/>
+        <meta property="og:url" content="http://www.matthewdgilbert.com/blog/data-mining.html"/>
+        <meta property="og:description" content="This is an introduction to the pitfalls of data mining in the context of financial backtests"/>
+        <meta property="article:published_time" content="2014-12-15" />
+            <meta property="article:section" content="blog" />
+            <meta property="article:author" content="Matthew Gilbert" />
+
+
+    <!-- Bootstrap -->
+        <link rel="stylesheet" href="http://www.matthewdgilbert.com/theme/css/bootstrap.readable-old.min.css" type="text/css"/>
+    <link href="http://www.matthewdgilbert.com/theme/css/font-awesome.min.css" rel="stylesheet">
+
+    <!--link href="http://www.matthewdgilbert.com/theme/css/pygments/github.css" rel="stylesheet"-->
+    <link href="http://www.matthewdgilbert.com/theme/css/prism.css" rel="stylesheet" />
+    <link rel="stylesheet" href="http://www.matthewdgilbert.com/theme/css/style.css" type="text/css"/>
+        <link href="http://www.matthewdgilbert.com/static/custom.css" rel="stylesheet">
+
+        <link href="http://www.matthewdgilbert.com/feeds/all.atom.xml" type="application/atom+xml" rel="alternate"
+              title="matthewdgilbert ATOM Feed"/>
+
+
+
+        <link href="http://www.matthewdgilbert.com/feeds/blog.atom.xml" type="application/atom+xml" rel="alternate"
+              title="matthewdgilbert blog ATOM Feed"/>
+
+
+</head>
+<body>
+
+<div class="navbar navbar-default navbar-fixed-top" role="navigation">
+	<div class="container">
+        <div class="navbar-header">
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-ex1-collapse">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            <a href="http://www.matthewdgilbert.com/" class="navbar-brand">
+matthewdgilbert            </a>
+        </div>
+        <div class="collapse navbar-collapse navbar-ex1-collapse">
+            <ul class="nav navbar-nav">
+                         <li><a href="http://www.matthewdgilbert.com/pages/about.html">
+                             About
+                          </a></li>
+            </ul>
+            <ul class="nav navbar-nav navbar-right">
+              <li><a href="http://www.matthewdgilbert.com/archives.html"><i class="fa fa-th-list"></i><span class="icon-label">Archives</span></a></li>
+            </ul>
+        </div>
+        <!-- /.navbar-collapse -->
+    </div>
+</div> <!-- /.navbar -->
+<!-- Banner -->
+<!-- End Banner -->
+<div class="container">
+    <div class="row">
+        <div class="col-lg-12">
+    <section id="content">
+        <article>
+            <header class="page-header">
+                <h1>
+                    <a href="http://www.matthewdgilbert.com/blog/data-mining.html"
+                       rel="bookmark"
+                       title="Permalink to Data Mining">
+                        Data Mining
+                    </a>
+                </h1>
+            </header>
+            <div class="entry-content">
+                <div class="panel">
+                    <div class="panel-body">
+<footer class="post-info">
+    <span class="label label-default">Date</span>
+    <span class="published">
+        <i class="fa fa-calendar"></i><time datetime="2014-12-15T00:00:00-05:00"> Mon 15 December 2014</time>
+    </span>
+
+
+
+
+
+    
+</footer><!-- /.post-info -->                    </div>
+                </div>
+                <p>This is an introduction to the pitfalls of data mining in the context of financial backtests</p>
+<pre><code class="language-python">%pylab inline
+</code></pre>
+
+<pre><code>Populating the interactive namespace from numpy and matplotlib
+</code></pre>
+<pre><code class="language-python">import pandas as pd
+import pandas.io.data as web
+import scipy.optimize
+from mayavi import mlab
+from IPython.display import Image
+from itertools import product
+</code></pre>
+
+<pre><code>WARNING:traits.has_traits:DEPRECATED: traits.has_traits.wrapped_class, 'the 'implements' class advisor has been deprecated. Use the 'provides' class decorator.
+</code></pre>
+<p>The goal of this notebook is to explore different trading strategies for XIV (http://www.velocitysharesetns.com/xiv)
+The idea is to start with some nieve entry and exit parameters and refine these until we find something that appears
+to have some juice. The whole point of this exercise is to find a strategy that looks
+appealing but is complete bogus, after all, if there was any juice I wouldn't be publishing this ;).</p>
+<pre><code class="language-python">xiv = web.DataReader(&quot;XIV&quot;, &quot;yahoo&quot;)
+</code></pre>
+
+<pre><code class="language-python">xiv.head()
+</code></pre>
+
+<div style="max-height:1000px;max-width:1500px;overflow:auto;">
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Open</th>
+      <th>High</th>
+      <th>Low</th>
+      <th>Close</th>
+      <th>Volume</th>
+      <th>Adj Close</th>
+    </tr>
+    <tr>
+      <th>Date</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>2010-11-30</th>
+      <td>  95.65</td>
+      <td>  97.72</td>
+      <td>  95.42</td>
+      <td>  95.57</td>
+      <td> 252000</td>
+      <td>  9.56</td>
+    </tr>
+    <tr>
+      <th>2010-12-01</th>
+      <td>  99.57</td>
+      <td>  99.93</td>
+      <td>  97.83</td>
+      <td>  97.87</td>
+      <td> 484000</td>
+      <td>  9.79</td>
+    </tr>
+    <tr>
+      <th>2010-12-02</th>
+      <td>  99.24</td>
+      <td> 104.29</td>
+      <td>  99.24</td>
+      <td> 104.29</td>
+      <td>  62000</td>
+      <td> 10.43</td>
+    </tr>
+    <tr>
+      <th>2010-12-03</th>
+      <td> 104.23</td>
+      <td> 110.41</td>
+      <td> 104.23</td>
+      <td> 110.41</td>
+      <td> 168000</td>
+      <td> 11.04</td>
+    </tr>
+    <tr>
+      <th>2010-12-06</th>
+      <td> 109.46</td>
+      <td> 112.78</td>
+      <td> 109.46</td>
+      <td> 112.52</td>
+      <td> 232000</td>
+      <td> 11.25</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<pre><code class="language-python">xiv.drop([&quot;High&quot;, &quot;Low&quot;, &quot;Volume&quot;, &quot;Close&quot;], axis=1, inplace=True)
+</code></pre>
+
+<pre><code class="language-python"># adjust historical opens for 10:1 split on June 27, 2010
+xiv.loc[:&quot;2011-06-24&quot;, &quot;Open&quot;] = xiv.loc[:&quot;2011-06-24&quot;, &quot;Open&quot;] / 10
+</code></pre>
+
+<pre><code class="language-python">xiv.plot(figsize=(12,8))
+</code></pre>
+
+<pre><code>&lt;matplotlib.axes._subplots.AxesSubplot at 0x7fb7ba047e50&gt;
+</code></pre>
+<p><img alt="png" src="2014-12-15_data-mining_files/2014-12-15_data-mining_8_1.png" /></p>
+<h3>Calculate daily returns for different holding periods</h3>
+<pre><code class="language-python"># standard close to close returns
+rets_Cl = (xiv[&quot;Adj Close&quot;] - xiv[&quot;Adj Close&quot;].shift(1)) / xiv[&quot;Adj Close&quot;].shift(1)
+# returns obtained for only only holding positons for the day
+rets_day = (xiv[&quot;Adj Close&quot;] - xiv[&quot;Open&quot;]) / xiv[&quot;Open&quot;]
+rets = pd.concat([rets_Cl, rets_day], axis=1)
+rets.columns = [&quot;Close&quot;, &quot;Day&quot;]
+</code></pre>
+
+<h3>Split returns into in sample and out of sample components</h3>
+<pre><code class="language-python">spdate = &quot;2014-06-01&quot;
+rets_IS = rets[:spdate]
+rets_OS = rets[spdate:]
+</code></pre>
+
+<pre><code class="language-python">cumsum(rets_IS).plot(figsize=(12,8))
+</code></pre>
+
+<pre><code>&lt;matplotlib.axes._subplots.AxesSubplot at 0x7fb7b982fa90&gt;
+</code></pre>
+<p><img alt="png" src="2014-12-15_data-mining_files/2014-12-15_data-mining_13_1.png" /></p>
+<h2>Define some performance metric</h2>
+<p>We use IR here which is a common performance metric</p>
+<pre><code class="language-python">def IR(df):
+    ir = sqrt(252) * (np.mean(df) / np.std(df))
+    # addresses strategies which are never invested
+    if np.isnan(ir):
+        ir = np.float64(0)
+    return ir
+</code></pre>
+
+<pre><code class="language-python">rets_IS.apply(IR)
+</code></pre>
+
+<pre><code>Close    0.967489
+Day      0.410018
+dtype: float64
+</code></pre>
+<p>Define a naive reversion strategy that buys the asset if its daily returns are less than  `stdevs number
+of standard deviations, where standard deviation is calculated using a rolling window of length `std_win.
+Hold the position for `hwin number of days. The strategy is using open to close prices to make a decision at the close which has some look ahead bias however if we assume that the Close - <span class="math">\(\epsilon\)</span> is close enough to Close such that the signal is unchanged (which is a reasonable assumption) then in practice we could achieve this result by using some price slightly before the close. This also ignores important details like tcosts.</p>
+<pre><code class="language-python">def rev_strat(ser, std_win=30, stdevs=1.5, hwin=1):
+    hwin = int(hwin)
+    stds = pd.stats.moments.rolling_std(ser, std_win)
+    sig = 1*(ser &lt; -stdevs*stds)
+    hsig = sig.copy()
+    idx = 0
+    while idx &lt;= len(sig)-1:
+        if sig[idx] == 1:
+            hsig[idx:idx+hwin] = 1
+            idx = idx + hwin - 1
+        idx += 1
+    return hsig
+</code></pre>
+
+<pre><code class="language-python">sig = rev_strat(rets_IS[&quot;Day&quot;])
+</code></pre>
+
+<pre><code class="language-python"># signal needs to be lagged by a day to avoid look ahead bias since we are using the Open to Close which
+# overlaps with the Close to Close
+rev_rets = sig.shift(1)*rets_IS[&quot;Close&quot;]
+cumsum(rev_rets).plot(figsize=(12, 8))
+plt.title(&quot;Cumulative Return&quot;)
+</code></pre>
+
+<pre><code>&lt;matplotlib.text.Text at 0x7fb7b3efafd0&gt;
+</code></pre>
+<p><img alt="png" src="2014-12-15_data-mining_files/2014-12-15_data-mining_20_1.png" /></p>
+<p>Even without calculating performance metrics, you probably would realize you don't
+want to trade this strategy, but just for fun</p>
+<pre><code class="language-python">print(IR(rev_rets))
+</code></pre>
+
+<pre><code>0.0305600321502
+</code></pre>
+<pre><code class="language-python">def f(x, *params):
+    std_win, stdevs, hwin = x
+    ser, rets = params
+    ir_val = IR((rev_strat(ser, std_win, stdevs, hwin).shift(1)*rets))
+    return -ir_val
+</code></pre>
+
+<pre><code class="language-python">rranges = (slice(2, 91, 1), slice(1, 3.25, 0.25), slice(1, 31, 1))
+params = (rets_IS[&quot;Day&quot;], rets_IS[&quot;Close&quot;])
+</code></pre>
+
+<pre><code class="language-python">%timeit f((30, 1.5, 1), *params)
+</code></pre>
+
+<pre><code>100 loops, best of 3: 16.5 ms per loop
+</code></pre>
+<p>The code below is fairly slow, on my machine it takes ~6.6 mins (89 * 9 * 31 * 0.0161 / 60)</p>
+<pre><code class="language-python">grid_vals = scipy.optimize.brute(f, rranges, args=params, full_output=True)
+</code></pre>
+
+<p>Since scipy.optimize.brute minimizes a function, we have defined f as a function which returns negative IR,
+the optimal -IR for this strategy is show below</p>
+<pre><code class="language-python">grid_vals[0]
+</code></pre>
+
+<pre><code>array([  6.,   1.,  16.])
+</code></pre>
+<p>For the optimal signal, the path of cumulative returns is calculated</p>
+<pre><code class="language-python">sig_opt = rev_strat(rets_IS[&quot;Day&quot;], grid_vals[0][0], grid_vals[0][1], grid_vals[0][2])
+# signal needs to be lagged by a day to avoid look ahead bias since we are using the Open to Close which
+# overlaps with the Close to Close
+rev_opt_rets = sig_opt.shift(1)*rets_IS[&quot;Close&quot;]
+cumsum(rev_opt_rets).plot(figsize=(12, 8))
+plt.title(&quot;Cumulative Return of Optimal Strategy&quot;)
+</code></pre>
+
+<pre><code>&lt;matplotlib.text.Text at 0x7fb7b3ddec90&gt;
+</code></pre>
+<p><img alt="png" src="2014-12-15_data-mining_files/2014-12-15_data-mining_31_1.png" /></p>
+<pre><code class="language-python">irs = grid_vals[3].copy()
+irs[irs == 100] = 0
+irs = -irs
+b1 = np.percentile(irs, 20)
+b2 = np.percentile(irs, 80)
+mlab.pipeline.volume(mlab.pipeline.scalar_field(irs), vmin=b1, vmax=b2)
+mlab.axes(xlabel=&quot;Std Window&quot;, ylabel=&quot;Std Threshold&quot;, zlabel=&quot;Holding Period&quot;)
+mlab.colorbar()
+mlab.show()
+</code></pre>
+
+<pre><code class="language-python">Image('sensitivity.png', width=950)
+</code></pre>
+
+<p><img alt="png" src="2014-12-15_data-mining_files/2014-12-15_data-mining_33_0.png" /></p>
+<p>The idea with the graph above was to get a feel for how sensitive the IR was with respect to different parameter specifications, although admittedly this graph isn't very informative. The colorbar indicates the IR of the strategy for different parameter choices. The most sensitive choice is holding period, since there are sharp transitions across this axis. Another approach to check the stability of the model would be to perturb the optimal parameter choice (6, 1, 16) and examine the effects.</p>
+<pre><code class="language-python">stdwins = [5,6,7]
+stddevs = [0.75, 1, 1.25]
+hwins = [15, 16, 17]
+
+df = pd.DataFrame()
+for i, params in enumerate(product(stdwins, stddevs, hwins)):
+    sig = rev_strat(rets_IS[&quot;Day&quot;], params[0], params[1], params[2])
+    rev_rets = sig.shift(1)*rets_IS[&quot;Close&quot;]
+    df[params] = rev_rets
+
+cumsum(df).plot(figsize=(17, 12))
+plt.legend(loc='upper left', ncol=2)
+plt.title(&quot;Cumulative Return in Neighborhood of Optimal Strategy&quot;)
+
+</code></pre>
+
+<pre><code>&lt;matplotlib.text.Text at 0x7fb7b086a050&gt;
+</code></pre>
+<p><img alt="png" src="2014-12-15_data-mining_files/2014-12-15_data-mining_35_1.png" /></p>
+<h2>Out of Sample</h2>
+<p>Another way to determine whether a strategy performs well is to check the performance out of sample. Since we have deligently seperated our returns into two buckets, we can take the parameters chosen over the first subsample and evaluate the performance of the specified strategy on the second set of returns. As expected, the model performs terribly.</p>
+<pre><code class="language-python">sig_os = rev_strat(rets_OS[&quot;Day&quot;], 6, 1, 16)
+rev_rets_os = sig_os.shift(1)*rets_OS[&quot;Close&quot;]
+IR(rev_rets_os)
+</code></pre>
+
+<pre><code>0.22769032485813084
+</code></pre>
+<pre><code class="language-python">cumsum(rev_rets_os).plot(figsize=(12, 8))
+</code></pre>
+
+<pre><code>&lt;matplotlib.axes._subplots.AxesSubplot at 0x7fb7b3f77e10&gt;
+</code></pre>
+<p><img alt="png" src="2014-12-15_data-mining_files/2014-12-15_data-mining_38_1.png" /></p>
+<script type="text/javascript">if (!document.getElementById('mathjaxscript_pelican_#%@#$@#')) {
+    var align = "center",
+        indent = "0em",
+        linebreak = "false";
+
+    if (false) {
+        align = (screen.width < 768) ? "left" : align;
+        indent = (screen.width < 768) ? "0em" : indent;
+        linebreak = (screen.width < 768) ? 'true' : linebreak;
+    }
+
+    var mathjaxscript = document.createElement('script');
+    var location_protocol = (false) ? 'https' : document.location.protocol;
+    if (location_protocol !== 'http' && location_protocol !== 'https') location_protocol = 'https:';
+    mathjaxscript.id = 'mathjaxscript_pelican_#%@#$@#';
+    mathjaxscript.type = 'text/javascript';
+    mathjaxscript.src = location_protocol + '//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML';
+    mathjaxscript[(window.opera ? "innerHTML" : "text")] =
+        "MathJax.Hub.Config({" +
+        "    config: ['MMLorHTML.js']," +
+        "    TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } }," +
+        "    jax: ['input/TeX','input/MathML','output/HTML-CSS']," +
+        "    extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']," +
+        "    displayAlign: '"+ align +"'," +
+        "    displayIndent: '"+ indent +"'," +
+        "    showMathMenu: true," +
+        "    messageStyle: 'normal'," +
+        "    tex2jax: { " +
+        "        inlineMath: [ ['\\\\(','\\\\)'] ], " +
+        "        displayMath: [ ['$$','$$'] ]," +
+        "        processEscapes: true," +
+        "        preview: 'TeX'," +
+        "    }, " +
+        "    'HTML-CSS': { " +
+        "        styles: { '.MathJax_Display, .MathJax .mo, .MathJax .mi, .MathJax .mn': {color: 'inherit ! important'} }," +
+        "        linebreaks: { automatic: "+ linebreak +", width: '90% container' }," +
+        "    }, " +
+        "}); " +
+        "if ('default' !== 'default') {" +
+            "MathJax.Hub.Register.StartupHook('HTML-CSS Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax['HTML-CSS'].FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+            "MathJax.Hub.Register.StartupHook('SVG Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax.SVG.FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+        "}";
+    (document.body || document.getElementsByTagName('head')[0]).appendChild(mathjaxscript);
+}
+</script>
+            </div>
+            <!-- /.entry-content -->
+        </article>
+    </section>
+
+        </div>
+    </div>
+</div>
+<footer>
+   <div class="container">
+      <hr>
+      <div class="row">
+         <div class="col-xs-10">&copy; 2017 Matthew Gilbert
+            &middot; Powered by <a href="https://github.com/DandyDev/pelican-bootstrap3" target="_blank">pelican-bootstrap3</a>,
+            <a href="http://docs.getpelican.com/" target="_blank">Pelican</a>,
+            <a href="http://getbootstrap.com" target="_blank">Bootstrap</a>              <p><small>The views expressed on this site are my own and do not reflect those of my employer</small></p>
+         </div>
+         <div class="col-xs-2"><p class="pull-right"><i class="fa fa-arrow-up"></i> <a href="#">Back to top</a></p></div>
+      </div>
+   </div>
+</footer>
+<script src="http://www.matthewdgilbert.com/theme/js/jquery.min.js"></script>
+
+<!-- Include all compiled plugins (below), or include individual files as needed -->
+<script src="http://www.matthewdgilbert.com/theme/js/bootstrap.min.js"></script>
+
+<!-- Enable responsive features in IE8 with Respond.js (https://github.com/scottjehl/Respond) -->
+<script src="http://www.matthewdgilbert.com/theme/js/respond.min.js"></script>
+
+    <script src="http://www.matthewdgilbert.com/theme/js/bodypadding.js"></script>
+    <!-- Google Analytics -->
+    <script type="text/javascript">
+
+        var _gaq = _gaq || [];
+        _gaq.push(['_setAccount', 'UA-60327105-1']);
+        _gaq.push(['_trackPageview']);
+
+        (function () {
+            var ga = document.createElement('script');
+            ga.type = 'text/javascript';
+            ga.async = true;
+            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(ga, s);
+        })();
+    </script>
+    <!-- End Google Analytics Code -->
+
+<script src="http://www.matthewdgilbert.com/theme/js/prism.js"></script>
+</body>
+</html>

@@ -1,0 +1,946 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>matthewdgilbert</title><link href="http://www.matthewdgilbert.com/" rel="alternate"></link><link href="http://www.matthewdgilbert.com/feeds/all.atom.xml" rel="self"></link><id>http://www.matthewdgilbert.com/</id><updated>2017-09-10T00:00:00-04:00</updated><entry><title>Introduction to gurobipy</title><link href="http://www.matthewdgilbert.com/blog/introduction-to-gurobipy.html" rel="alternate"></link><published>2017-09-10T00:00:00-04:00</published><updated>2017-09-10T00:00:00-04:00</updated><author><name>Matthew Gilbert</name></author><id>tag:www.matthewdgilbert.com,2017-09-10:blog/introduction-to-gurobipy.html</id><summary type="html">&lt;p&gt;I recently played around with &lt;em&gt;gurobipy&lt;/em&gt;, the excellent &lt;em&gt;python&lt;/em&gt; wrapper to &lt;em&gt;Gurobi&lt;/em&gt;, and wanted to summarize my experience. &lt;em&gt;Gurobi&lt;/em&gt; is a commercial solver but has a free restricted licenses for academics and online coursework.&lt;/p&gt;
+&lt;p&gt;First you need to install gurobipy, download gurobi from http://www.gurobi.com/downloads/gurobi-optimizer
+untar to /opt&lt;/p&gt;
+&lt;p&gt;Append the following to your .bashrc file, where gurobi701 may vary depending
+on the version of gurobi you installed&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-bash"&gt;export GUROBI_HOME=&amp;quot;/opt/gurobi701/linux64&amp;quot;
+export PATH=&amp;quot;${PATH}:${GUROBI_HOME}/bin&amp;quot;
+export LD_LIBRARY_PATH=&amp;quot;${LD_LIBRARY_PATH}:${GUROBI_HOME}/lib&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Download a license from&lt;/p&gt;
+&lt;p&gt;https://user.gurobi.com/download/licenses/free-online&lt;/p&gt;
+&lt;p&gt;Install the python library using&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-bash"&gt;cd /opt/gurobi701/linux64
+python setup.py install
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h2&gt;Hello world example&lt;/h2&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;from gurobipy import *
+m = Model()
+m.setParam('OutputFlag', True)
+
+x = m.addVar(name='x')
+y = m.addVar(name='y')
+
+m.setObjective(3*x - y, GRB.MAXIMIZE)
+m.addConstr(x + y &amp;lt;= 1, &amp;quot;c1&amp;quot;)
+
+m.update()
+m.optimize()
+
+for v in m.getVars():
+    print('%s %s' % (v.VarName, v.X))
+print('Obj: %s' % m.ObjVal)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;Parameter OutputFlag unchanged
+   Value: 1  Min: 0  Max: 1  Default: 1
+Optimize a model with 1 rows, 2 columns and 2 nonzeros
+Coefficient statistics:
+  Matrix range     [1e+00, 1e+00]
+  Objective range  [1e+00, 3e+00]
+  Bounds range     [0e+00, 0e+00]
+  RHS range        [1e+00, 1e+00]
+Presolve removed 1 rows and 2 columns
+Presolve time: 0.01s
+Presolve: All rows and columns removed
+Iteration    Objective       Primal Inf.    Dual Inf.      Time
+       0    3.0000000e+00   0.000000e+00   0.000000e+00      0s
+
+Solved in 0 iterations and 0.01 seconds
+Optimal objective  3.000000000e+00
+x 1.0
+y 0.0
+Obj: 3.0
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Mean Variance with Piecewise Linear Tcost&lt;/h2&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;from gurobipy import *
+import numpy as np
+
+# Objective function
+#
+# max h'mu - h'Sh - (f(h1) + f(h2))
+#
+# where f() are piecewise linear
+
+
+def run_opti(current_holdings, alphas, covariance, tcosts=None, risk_aversion=1):
+
+    m = Model('portfolio')
+    m.setParam('OutputFlag', False)
+
+    # Create variables
+
+    lb = -1e9
+    ub = 1e9
+
+    holdings = pd.Series(m.addVars(alphas.index, lb=lb, ub=ub))
+
+    # Integrate new variables
+    var_obj = -risk_aversion * covariance.dot(holdings).dot(holdings)
+
+    if tcosts is not None:
+        # setting piecewise linear objectives overrides other linear objectives
+        # so include alpha in pwl
+        m.setObjective(var_obj, GRB.MAXIMIZE)
+
+        for ast in holdings.index:
+            tc = tcosts.trade_cost
+            centered_notional = list(tcosts.notional - current_holdings.loc[ast])
+            tcost_and_alpha = [-tcn + alphas.loc[ast] * ntnl for tcn, ntnl in zip(tc, centered_notional)]
+            m.setPWLObj(holdings.loc[ast], centered_notional, tcost_and_alpha)
+
+    else:
+        m.setObjective(alphas.dot(holdings) + var_obj, GRB.MAXIMIZE)
+
+    m.update()
+    m.optimize()
+
+    if m.Status == GRB.OPTIMAL:
+        print('Solution is optimal')
+    else:
+        print('Solution is not optimal')
+    for v in m.getVars():
+        print('%s %g' % (v.VarName, v.X))
+    print('Obj: %g' % m.ObjVal)
+    print('')
+
+    return holdings.apply(lambda x: x.X), m
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;# covariance matrix
+#   0.01    0.0091
+#   0.0091  0.0169
+import pandas as pd
+
+alphas = pd.Series((-3e-4, 5e-4), index=[&amp;quot;A&amp;quot;, &amp;quot;B&amp;quot;])
+risk_aversion = 0.000000006
+
+cov = pd.DataFrame([[0.01, 0.0091], [0.0091, 0.0169]], index=[&amp;quot;A&amp;quot;, &amp;quot;B&amp;quot;], columns=[&amp;quot;A&amp;quot;, &amp;quot;B&amp;quot;])
+
+notional = [-2.0000e9, -1.0000e9, -0.8000e9, -0.6000e9, -0.4000e9, -0.2500e9,
+    -0.1000e9, -0.0500e9, -0.0250e9, -0.0100e9, -0.0010e9, 0, 0.0010e9,
+    0.0100e9, 0.0250e9, 0.0500e9, 0.1000e9, 0.2500e9, 0.4000e9,
+    0.6000e9, 0.8000e9, 1.0000e9, 2.0000e9]
+
+trade_cost = [2.938964e6, 0.753364e6, 0.488104e6, 0.280144e6, 0.129472e6,
+    0.053766e6, 0.011007e6, 0.003751e6, 0.001435e6, 0.000465e6,
+    0.000037e6, 0, 0.000037e6, 0.000465e6, 0.001435e6, 0.003751e6,
+    0.011007e6, 0.053766e6, 0.129472e6, 0.280144e6, 0.488104e6,
+    0.753364e6, 2.938964e6]
+
+tcosts = pd.DataFrame({&amp;quot;notional&amp;quot;: notional, &amp;quot;trade_cost&amp;quot;: trade_cost})
+
+current_hlds = pd.Series(0, index=['A', 'B'])
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;import matplotlib.pyplot as plt
+plt.figure(figsize=(12,8))
+plt.plot(tcosts.notional, tcosts.trade_cost)
+plt.title(&amp;quot;Tcost Curve&amp;quot;)
+plt.show()
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;img alt="png" src="2017-09-10_gurobipy_files/2017-09-10_gurobipy_6_0.png" /&gt;&lt;/p&gt;
+&lt;h4&gt;Inspecting the results with and without accounting for tcosts, you can see this is having the desired effect of slowing trading&lt;/h4&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;ntc_hlds, _ = run_opti(current_hlds, alphas, cov, risk_aversion=risk_aversion)
+ntc_hlds.apply(lambda x: '${:,.2f}'.format(x))
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;Solution is optimal
+C0 -9.30116e+06
+C1 7.4738e+06
+Obj: 3263.62
+
+
+
+
+
+
+A    $-9,301,156.36
+B     $7,473,798.20
+dtype: object
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;tc_hlds, model = run_opti(current_hlds, alphas, cov, tcosts, risk_aversion=risk_aversion)
+tc_hlds.apply(lambda x: '${:,.2f}'.format(x))
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;Solution is optimal
+C0 -8.10569e+06
+C1 6.59559e+06
+Obj: 2536.3
+
+
+
+
+
+
+A    $-8,105,692.42
+B     $6,595,592.00
+dtype: object
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h4&gt;If you are having issues, a useful trick for debugging is to inspect the model by writing it out to an lp format&lt;/h4&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;import tempfile
+fn = tempfile.mktemp(&amp;quot;.lp&amp;quot;)
+
+model.write(fn)
+!cat $fn
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;\ Model portfolio
+\ LP format - for model browsing. Use MPS format to capture full model detail.
+Maximize
+  __pwl(C0) + __pwl(C1) + [ - 1.2e-10 C0 ^2 - 2.184e-10 C0 * C1
+   - 2.028e-10 C1 ^2 ] / 2
+Subject To
+Bounds
+ -1e+09 &amp;lt;= C0 &amp;lt;= 1e+09
+ -1e+09 &amp;lt;= C1 &amp;lt;= 1e+09
+PWLObj
+ C0: (-2e+09, -2.338964e+06) (-1e+09, -453364) (-8e+08, -248104)
+  (-6e+08, -100144) (-4e+08, -9472) (-2.5e+08, 21234) (-1e+08, 18993)
+  (-5e+07, 11249) (-2.5e+07, 6065) (-1e+07, 2535) (-1e+06, 263) (0, -0)
+  (1e+06, -337) (1e+07, -3465) (2.5e+07, -8935) (5e+07, -18751)
+  (1e+08, -41007) (2.5e+08, -128766) (4e+08, -249472) (6e+08, -460144)
+  (8e+08, -728104) (1e+09, -1.053364e+06) (2e+09, -3.538964e+06)
+ C1: (-2e+09, -3.938964e+06) (-1e+09, -1.253364e+06) (-8e+08, -888104)
+  (-6e+08, -580144) (-4e+08, -329472) (-2.5e+08, -178766) (-1e+08, -61007)
+  (-5e+07, -28751) (-2.5e+07, -13935) (-1e+07, -5465) (-1e+06, -537)
+  (0, 0) (1e+06, 463) (1e+07, 4535) (2.5e+07, 11065) (5e+07, 21249)
+  (1e+08, 38993) (2.5e+08, 71234) (4e+08, 70528) (6e+08, 19856)
+  (8e+08, -88104) (1e+09, -253364) (2e+09, -1.938964e+06)
+End
+&lt;/code&gt;&lt;/pre&gt;</summary></entry><entry><title>Fun with Docker</title><link href="http://www.matthewdgilbert.com/blog/fun-with-docker.html" rel="alternate"></link><published>2016-04-30T00:00:00-04:00</published><updated>2016-04-30T00:00:00-04:00</updated><author><name>Matthew Gilbert</name></author><id>tag:www.matthewdgilbert.com,2016-04-30:blog/fun-with-docker.html</id><summary type="html">&lt;p&gt;I've heard a bit about docker and figured it would be neat to play around with
+but didn't really have anything specific in mind. The dependencies of this blog
+have been increasing and I recently had to spend several hours debugging
+things to get my site to generate, so I figured this was as good a time as any
+to finally test out docker. I generate this blog with the python framework
+pelican and a &lt;a href="https://github.com/danielfrg/pelican-ipynb"&gt;plugin&lt;/a&gt; which
+allows me to generate content from jupyter notebooks. There is also another
+interesting &lt;a href="https://github.com/getpelican/pelican-plugins/tree/master/rmd_reader"&gt;plugin&lt;/a&gt;
+for incorporating .Rmd files, which I hope to take a look at at some point.
+Since I'm using the anaconda python distribution I probably could have just
+done something like&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-bash"&gt;conda list --export &amp;gt; blog_reqs.txt
+conda create -n blog --file blog_reqs.txt
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;and then built my blog using this conda environment, but if I move towards
+creating some content in .Rmd files this solution would not address
+dependency issues with R, plus I want to try docker!&lt;/p&gt;
+&lt;p&gt;As a side note, if you haven't heard of docker, there is an interesting talk
+&lt;a href="https://puppetlabs.com/presentations/using-docker-puppet-james-turnbull-kickstarter"&gt;here&lt;/a&gt;
+to motivate its use and a nice introductory tutorial
+&lt;a href="https://sysadmincasts.com/episodes/31-introduction-to-docker"&gt;here&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;I created a Dockerfile to generate my blog container that looks like&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-bash"&gt;FROM debian:8.4
+
+MAINTAINER Matthew Gilbert &amp;lt;matthew.gilbert12@gmail.com&amp;gt;
+
+RUN apt-get update &amp;amp;&amp;amp; apt-get install -y \
+    wget git bzip2 make vi
+
+RUN mkdir -p /home/matthew/Projects
+
+RUN echo 'export PATH=/opt/conda/bin:$PATH' &amp;gt; /etc/profile.d/conda.sh &amp;amp;&amp;amp; \
+    wget --quiet https://repo.continuum.io/archive/Anaconda2-4.0.0-Linux-x86_64.sh &amp;amp;&amp;amp; \
+    /bin/bash /Anaconda2-4.0.0-Linux-x86_64.sh -b -p /opt/conda &amp;amp;&amp;amp; \
+    rm /Anaconda2-4.0.0-Linux-x86_64.sh
+
+ENV PATH /opt/conda/bin:$PATH
+
+# colour no longer rendering with pelican 3.7
+RUN conda install markdown==2.6.6
+RUN pip install pelican==3.6.3
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Then to generate my blog I just build the container, start it up exposing a
+port, build the static pages and serve them to the exposed port.&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-bash"&gt;matthew@matthew-asus ~ $ docker build -t blog ~/Projects/dockers/blog/
+matthew@matthew-asus ~ $ cd ~/Projects
+matthew@matthew-asus ~ $ git clone --recurse-submodules git@github.com:matthewgilbert/blog.git 
+matthew@matthew-asus ~ $ cd blog
+matthew@matthew-asus ~ $ docker run -v $PWD:/tmp/working -w=/tmp/working -itp 8000:8000 blog bash
+root@79cc71ca90f1:/tmp/working# make html
+pelican /tmp/working/content -o /tmp/working/output -s /tmp/working/pelicanconf.py 
+Done: Processed 2 articles, 0 drafts, 1 page and 0 hidden pages in 1.38 seconds.
+root@79cc71ca90f1:/tmp/working# make serve
+cd /tmp/working/output &amp;amp;&amp;amp; python -m pelican.server
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;From there I can inspect them from a web browser on the host at
+&lt;code&gt;localhost:8000/&lt;/code&gt; and if all looks good can deploy them to Github
+for hosting.&lt;/p&gt;</summary></entry><entry><title>Intro to pdblp</title><link href="http://www.matthewdgilbert.com/blog/pdblp.html" rel="alternate"></link><published>2015-06-21T00:00:00-04:00</published><updated>2015-06-21T00:00:00-04:00</updated><author><name>Matthew Gilbert</name></author><id>tag:www.matthewdgilbert.com,2015-06-21:blog/pdblp.html</id><summary type="html">&lt;p&gt;This is a simple introduction to pdblp, a wrapper for easy Bloomberg and pandas integration&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;%pylab inline
+import pdblp
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;Populating the interactive namespace from numpy and matplotlib
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The project &lt;a href="https://github.com/MatthewGilbert/pdblp"&gt;pdblp&lt;/a&gt; borrows heavily from the package by kyuni22, which is available &lt;a href="https://github.com/kyuni22/pybbg"&gt;here&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;The package currently wraps the Historical Data Request service and the Intraday Bar Request service. More details of the Open API can be found &lt;a href="http://www.bloomberglabs.com/api/documentation/"&gt;here&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;Before running this notebook you need to have access to a Bloomberg terminal on a windows machine and download and install pdblp&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-bash"&gt;git clone https://github.com/MatthewGilbert/pdblp.git
+cd pdblp
+pip install -e pdblp
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;con = pdblp.BCon(debug=False)
+con.start()
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;print(con.bdh.__doc__)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;        Get tickers and fields, return pandas dataframe with column MultiIndex
+        of tickers and fields
+
+        Parameters
+        ----------
+        tickers: {list, string}
+            String or list of strings corresponding to tickers
+        flds: {list, string}
+            String or list of strings corresponding to FLDS
+        start_date: string
+            String in format YYYYmmdd
+        end_date: string
+            String in format YYYYmmdd
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;df = con.bdh(['SPY Equity', 'IWM Equity'], 'PX_LAST', '20150103', '20150619')
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;df.head()
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;div style="max-height:1000px;max-width:1500px;overflow:auto;"&gt;
+&lt;table border="1" class="dataframe"&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;ticker&lt;/th&gt;
+      &lt;th&gt;IWM Equity&lt;/th&gt;
+      &lt;th&gt;SPY Equity&lt;/th&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;field&lt;/th&gt;
+      &lt;th&gt;PX_LAST&lt;/th&gt;
+      &lt;th&gt;PX_LAST&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-01-05&lt;/th&gt;
+      &lt;td&gt; 117.34&lt;/td&gt;
+      &lt;td&gt; 201.72&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-01-06&lt;/th&gt;
+      &lt;td&gt; 115.31&lt;/td&gt;
+      &lt;td&gt; 199.82&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-01-07&lt;/th&gt;
+      &lt;td&gt; 116.73&lt;/td&gt;
+      &lt;td&gt; 202.31&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-01-08&lt;/th&gt;
+      &lt;td&gt; 118.71&lt;/td&gt;
+      &lt;td&gt; 205.90&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-01-09&lt;/th&gt;
+      &lt;td&gt; 117.57&lt;/td&gt;
+      &lt;td&gt; 204.25&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;df.plot(figsize=(12,8))
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;lt;matplotlib.axes._subplots.AxesSubplot at 0xb62a828&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img alt="png" src="2015-06-21_pdblp_files/2015-06-21_pdblp_7_1.png" /&gt;&lt;/p&gt;
+&lt;p&gt;The bdh() function call returns a MultiIndex by default to be a consistent type in case multiple fields are requested&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;df2 = con.bdh(['SPY Equity', 'IWM Equity'], ['PX_LAST', 'VOLUME'], '20150103', '20150619')
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;df2.head()
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;div style="max-height:1000px;max-width:1500px;overflow:auto;"&gt;
+&lt;table border="1" class="dataframe"&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;ticker&lt;/th&gt;
+      &lt;th colspan="2" halign="left"&gt;IWM Equity&lt;/th&gt;
+      &lt;th colspan="2" halign="left"&gt;SPY Equity&lt;/th&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;field&lt;/th&gt;
+      &lt;th&gt;PX_LAST&lt;/th&gt;
+      &lt;th&gt;VOLUME&lt;/th&gt;
+      &lt;th&gt;PX_LAST&lt;/th&gt;
+      &lt;th&gt;VOLUME&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-01-05&lt;/th&gt;
+      &lt;td&gt; 117.34&lt;/td&gt;
+      &lt;td&gt; 51141891&lt;/td&gt;
+      &lt;td&gt; 201.72&lt;/td&gt;
+      &lt;td&gt; 169632646&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-01-06&lt;/th&gt;
+      &lt;td&gt; 115.31&lt;/td&gt;
+      &lt;td&gt; 67446040&lt;/td&gt;
+      &lt;td&gt; 199.82&lt;/td&gt;
+      &lt;td&gt; 209151408&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-01-07&lt;/th&gt;
+      &lt;td&gt; 116.73&lt;/td&gt;
+      &lt;td&gt; 32252095&lt;/td&gt;
+      &lt;td&gt; 202.31&lt;/td&gt;
+      &lt;td&gt; 125346709&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-01-08&lt;/th&gt;
+      &lt;td&gt; 118.71&lt;/td&gt;
+      &lt;td&gt; 28361730&lt;/td&gt;
+      &lt;td&gt; 205.90&lt;/td&gt;
+      &lt;td&gt; 147217784&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-01-09&lt;/th&gt;
+      &lt;td&gt; 117.57&lt;/td&gt;
+      &lt;td&gt; 26975175&lt;/td&gt;
+      &lt;td&gt; 204.25&lt;/td&gt;
+      &lt;td&gt; 158567288&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;print(con.bdib.__doc__)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;        Get Open, High, Low, Close, Volume, for a ticker.
+        Return pandas dataframe
+
+        Parameters
+        ----------
+        ticker: string
+            String corresponding to ticker
+        startDateTime: string
+            UTC datetime in format YYYY-mm-ddTHH:MM:SS
+        endDateTime: string
+            UTC datetime in format YYYY-mm-ddTHH:MM:SS
+        eventType: string {TRADE, BID, ASK, BID_BEST, ASK_BEST, BEST_BID,
+                           BEST_ASK}
+            Requested data event type
+        interval: int {1... 1440}
+            Length of time bars
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;df3 = con.bdib('SPY Equity', '2015-06-19T09:30:00', '2015-06-19T15:30:00',
+               eventType='TRADE', interval=15)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;df3.head()
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;div style="max-height:1000px;max-width:1500px;overflow:auto;"&gt;
+&lt;table border="1" class="dataframe"&gt;
+  &lt;thead&gt;
+    &lt;tr style="text-align: right;"&gt;
+      &lt;th&gt;&lt;/th&gt;
+      &lt;th&gt;open&lt;/th&gt;
+      &lt;th&gt;high&lt;/th&gt;
+      &lt;th&gt;low&lt;/th&gt;
+      &lt;th&gt;close&lt;/th&gt;
+      &lt;th&gt;volume&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-06-19 13:30:00&lt;/th&gt;
+      &lt;td&gt; 211.460&lt;/td&gt;
+      &lt;td&gt; 211.520&lt;/td&gt;
+      &lt;td&gt; 211.090&lt;/td&gt;
+      &lt;td&gt; 211.3573&lt;/td&gt;
+      &lt;td&gt; 9061632&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-06-19 13:45:00&lt;/th&gt;
+      &lt;td&gt; 211.360&lt;/td&gt;
+      &lt;td&gt; 211.405&lt;/td&gt;
+      &lt;td&gt; 211.100&lt;/td&gt;
+      &lt;td&gt; 211.3600&lt;/td&gt;
+      &lt;td&gt; 4212470&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-06-19 14:00:00&lt;/th&gt;
+      &lt;td&gt; 211.350&lt;/td&gt;
+      &lt;td&gt; 211.550&lt;/td&gt;
+      &lt;td&gt; 211.320&lt;/td&gt;
+      &lt;td&gt; 211.4299&lt;/td&gt;
+      &lt;td&gt; 3659095&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-06-19 14:15:00&lt;/th&gt;
+      &lt;td&gt; 211.430&lt;/td&gt;
+      &lt;td&gt; 211.550&lt;/td&gt;
+      &lt;td&gt; 211.325&lt;/td&gt;
+      &lt;td&gt; 211.4550&lt;/td&gt;
+      &lt;td&gt; 2186267&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2015-06-19 14:30:00&lt;/th&gt;
+      &lt;td&gt; 211.459&lt;/td&gt;
+      &lt;td&gt; 211.520&lt;/td&gt;
+      &lt;td&gt; 211.260&lt;/td&gt;
+      &lt;td&gt; 211.3300&lt;/td&gt;
+      &lt;td&gt; 2352812&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+&lt;p&gt;Simple typos can result in somewhat cryptic errors since the service returns a well format response which fails far downstream when a pandas object is attempted to be instantiated, as can be seen below.&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;con.bdh('SPY Equitys', 'PX_LAST', '20150103', '20150619')
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;    ---------------------------------------------------------------------------
+
+    TypeError                                 Traceback (most recent call last)
+
+    &amp;lt;ipython-input-12-fbd4efd0f296&amp;gt; in &amp;lt;module&amp;gt;()
+    ----&amp;gt; 1 con.bdh('SPY Equitys', 'PX_LAST', '20150103', '20150619')
+
+
+    c:\users\matthew\sandbox\pdblp\pdblp\pdblp.pyc in bdh(self, tickers, flds, start_date, end_date, periodselection)
+        126         data = DataFrame(data)
+        127         data.columns = pd.MultiIndex.from_tuples(
+    --&amp;gt; 128             data, names=['ticker', 'field']
+        129         )
+        130         data.index = pd.to_datetime(data.index)
+
+
+    C:\Anaconda\lib\site-packages\pandas\core\index.pyc in from_tuples(cls, tuples, sortorder, names)
+       3521         if len(tuples) == 0:
+       3522             # I think this is right? Not quite sure...
+    -&amp;gt; 3523             raise TypeError('Cannot infer number of levels from empty list')
+       3524 
+       3525         if isinstance(tuples, (np.ndarray, Index)):
+
+
+    TypeError: Cannot infer number of levels from empty list
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;There is a debug flag which prints the request/response to stdout so this type of error can be easily found.&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;con.debug = True
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;con.bdh('SPY Equitys', 'PX_LAST', '20150103', '20150619')
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;DEBUG:root:Sending Request:
+ HistoricalDataRequest = {
+    securities[] = {
+        &amp;quot;SPY Equitys&amp;quot;
+    }
+    fields[] = {
+        &amp;quot;PX_LAST&amp;quot;
+    }
+    periodicityAdjustment = ACTUAL
+    periodicitySelection = DAILY
+    startDate = &amp;quot;20150103&amp;quot;
+    endDate = &amp;quot;20150619&amp;quot;
+}
+
+DEBUG:root:Message Received:
+ HistoricalDataResponse = {
+    securityData = {
+        security = &amp;quot;SPY Equitys&amp;quot;
+        eidData[] = {
+        }
+        sequenceNumber = 0
+        securityError = {
+            source = &amp;quot;809::bbdbh6&amp;quot;
+            code = 15
+            category = &amp;quot;BAD_SEC&amp;quot;
+            message = &amp;quot;Unknown/Invalid securityInvalid Security [nid:809] &amp;quot;
+            subcategory = &amp;quot;INVALID_SECURITY&amp;quot;
+        }
+        fieldExceptions[] = {
+        }
+        fieldData[] = {
+        }
+    }
+}
+
+
+
+
+---------------------------------------------------------------------------
+
+TypeError                                 Traceback (most recent call last)
+
+&amp;lt;ipython-input-14-fbd4efd0f296&amp;gt; in &amp;lt;module&amp;gt;()
+----&amp;gt; 1 con.bdh('SPY Equitys', 'PX_LAST', '20150103', '20150619')
+
+
+c:\users\matthew\sandbox\pdblp\pdblp\pdblp.pyc in bdh(self, tickers, flds, start_date, end_date, periodselection)
+    126         data = DataFrame(data)
+    127         data.columns = pd.MultiIndex.from_tuples(
+--&amp;gt; 128             data, names=['ticker', 'field']
+    129         )
+    130         data.index = pd.to_datetime(data.index)
+
+
+C:\Anaconda\lib\site-packages\pandas\core\index.pyc in from_tuples(cls, tuples, sortorder, names)
+   3521         if len(tuples) == 0:
+   3522             # I think this is right? Not quite sure...
+-&amp;gt; 3523             raise TypeError('Cannot infer number of levels from empty list')
+   3524 
+   3525         if isinstance(tuples, (np.ndarray, Index)):
+
+
+TypeError: Cannot infer number of levels from empty list
+&lt;/code&gt;&lt;/pre&gt;</summary></entry><entry><title>Data Mining</title><link href="http://www.matthewdgilbert.com/blog/data-mining.html" rel="alternate"></link><published>2014-12-15T00:00:00-05:00</published><updated>2014-12-15T00:00:00-05:00</updated><author><name>Matthew Gilbert</name></author><id>tag:www.matthewdgilbert.com,2014-12-15:blog/data-mining.html</id><summary type="html">&lt;p&gt;This is an introduction to the pitfalls of data mining in the context of financial backtests&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;%pylab inline
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;Populating the interactive namespace from numpy and matplotlib
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;import pandas as pd
+import pandas.io.data as web
+import scipy.optimize
+from mayavi import mlab
+from IPython.display import Image
+from itertools import product
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;WARNING:traits.has_traits:DEPRECATED: traits.has_traits.wrapped_class, 'the 'implements' class advisor has been deprecated. Use the 'provides' class decorator.
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The goal of this notebook is to explore different trading strategies for XIV (http://www.velocitysharesetns.com/xiv)
+The idea is to start with some nieve entry and exit parameters and refine these until we find something that appears
+to have some juice. The whole point of this exercise is to find a strategy that looks
+appealing but is complete bogus, after all, if there was any juice I wouldn't be publishing this ;).&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;xiv = web.DataReader(&amp;quot;XIV&amp;quot;, &amp;quot;yahoo&amp;quot;)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;xiv.head()
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;div style="max-height:1000px;max-width:1500px;overflow:auto;"&gt;
+&lt;table border="1" class="dataframe"&gt;
+  &lt;thead&gt;
+    &lt;tr style="text-align: right;"&gt;
+      &lt;th&gt;&lt;/th&gt;
+      &lt;th&gt;Open&lt;/th&gt;
+      &lt;th&gt;High&lt;/th&gt;
+      &lt;th&gt;Low&lt;/th&gt;
+      &lt;th&gt;Close&lt;/th&gt;
+      &lt;th&gt;Volume&lt;/th&gt;
+      &lt;th&gt;Adj Close&lt;/th&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Date&lt;/th&gt;
+      &lt;th&gt;&lt;/th&gt;
+      &lt;th&gt;&lt;/th&gt;
+      &lt;th&gt;&lt;/th&gt;
+      &lt;th&gt;&lt;/th&gt;
+      &lt;th&gt;&lt;/th&gt;
+      &lt;th&gt;&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2010-11-30&lt;/th&gt;
+      &lt;td&gt;  95.65&lt;/td&gt;
+      &lt;td&gt;  97.72&lt;/td&gt;
+      &lt;td&gt;  95.42&lt;/td&gt;
+      &lt;td&gt;  95.57&lt;/td&gt;
+      &lt;td&gt; 252000&lt;/td&gt;
+      &lt;td&gt;  9.56&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2010-12-01&lt;/th&gt;
+      &lt;td&gt;  99.57&lt;/td&gt;
+      &lt;td&gt;  99.93&lt;/td&gt;
+      &lt;td&gt;  97.83&lt;/td&gt;
+      &lt;td&gt;  97.87&lt;/td&gt;
+      &lt;td&gt; 484000&lt;/td&gt;
+      &lt;td&gt;  9.79&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2010-12-02&lt;/th&gt;
+      &lt;td&gt;  99.24&lt;/td&gt;
+      &lt;td&gt; 104.29&lt;/td&gt;
+      &lt;td&gt;  99.24&lt;/td&gt;
+      &lt;td&gt; 104.29&lt;/td&gt;
+      &lt;td&gt;  62000&lt;/td&gt;
+      &lt;td&gt; 10.43&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2010-12-03&lt;/th&gt;
+      &lt;td&gt; 104.23&lt;/td&gt;
+      &lt;td&gt; 110.41&lt;/td&gt;
+      &lt;td&gt; 104.23&lt;/td&gt;
+      &lt;td&gt; 110.41&lt;/td&gt;
+      &lt;td&gt; 168000&lt;/td&gt;
+      &lt;td&gt; 11.04&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2010-12-06&lt;/th&gt;
+      &lt;td&gt; 109.46&lt;/td&gt;
+      &lt;td&gt; 112.78&lt;/td&gt;
+      &lt;td&gt; 109.46&lt;/td&gt;
+      &lt;td&gt; 112.52&lt;/td&gt;
+      &lt;td&gt; 232000&lt;/td&gt;
+      &lt;td&gt; 11.25&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;xiv.drop([&amp;quot;High&amp;quot;, &amp;quot;Low&amp;quot;, &amp;quot;Volume&amp;quot;, &amp;quot;Close&amp;quot;], axis=1, inplace=True)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;# adjust historical opens for 10:1 split on June 27, 2010
+xiv.loc[:&amp;quot;2011-06-24&amp;quot;, &amp;quot;Open&amp;quot;] = xiv.loc[:&amp;quot;2011-06-24&amp;quot;, &amp;quot;Open&amp;quot;] / 10
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;xiv.plot(figsize=(12,8))
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;lt;matplotlib.axes._subplots.AxesSubplot at 0x7fb7ba047e50&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img alt="png" src="2014-12-15_data-mining_files/2014-12-15_data-mining_8_1.png" /&gt;&lt;/p&gt;
+&lt;h3&gt;Calculate daily returns for different holding periods&lt;/h3&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;# standard close to close returns
+rets_Cl = (xiv[&amp;quot;Adj Close&amp;quot;] - xiv[&amp;quot;Adj Close&amp;quot;].shift(1)) / xiv[&amp;quot;Adj Close&amp;quot;].shift(1)
+# returns obtained for only only holding positons for the day
+rets_day = (xiv[&amp;quot;Adj Close&amp;quot;] - xiv[&amp;quot;Open&amp;quot;]) / xiv[&amp;quot;Open&amp;quot;]
+rets = pd.concat([rets_Cl, rets_day], axis=1)
+rets.columns = [&amp;quot;Close&amp;quot;, &amp;quot;Day&amp;quot;]
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;h3&gt;Split returns into in sample and out of sample components&lt;/h3&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;spdate = &amp;quot;2014-06-01&amp;quot;
+rets_IS = rets[:spdate]
+rets_OS = rets[spdate:]
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;cumsum(rets_IS).plot(figsize=(12,8))
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;lt;matplotlib.axes._subplots.AxesSubplot at 0x7fb7b982fa90&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img alt="png" src="2014-12-15_data-mining_files/2014-12-15_data-mining_13_1.png" /&gt;&lt;/p&gt;
+&lt;h2&gt;Define some performance metric&lt;/h2&gt;
+&lt;p&gt;We use IR here which is a common performance metric&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;def IR(df):
+    ir = sqrt(252) * (np.mean(df) / np.std(df))
+    # addresses strategies which are never invested
+    if np.isnan(ir):
+        ir = np.float64(0)
+    return ir
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;rets_IS.apply(IR)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;Close    0.967489
+Day      0.410018
+dtype: float64
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Define a naive reversion strategy that buys the asset if its daily returns are less than  `stdevs number
+of standard deviations, where standard deviation is calculated using a rolling window of length `std_win.
+Hold the position for `hwin number of days. The strategy is using open to close prices to make a decision at the close which has some look ahead bias however if we assume that the Close - &lt;span class="math"&gt;\(\epsilon\)&lt;/span&gt; is close enough to Close such that the signal is unchanged (which is a reasonable assumption) then in practice we could achieve this result by using some price slightly before the close. This also ignores important details like tcosts.&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;def rev_strat(ser, std_win=30, stdevs=1.5, hwin=1):
+    hwin = int(hwin)
+    stds = pd.stats.moments.rolling_std(ser, std_win)
+    sig = 1*(ser &amp;lt; -stdevs*stds)
+    hsig = sig.copy()
+    idx = 0
+    while idx &amp;lt;= len(sig)-1:
+        if sig[idx] == 1:
+            hsig[idx:idx+hwin] = 1
+            idx = idx + hwin - 1
+        idx += 1
+    return hsig
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;sig = rev_strat(rets_IS[&amp;quot;Day&amp;quot;])
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;# signal needs to be lagged by a day to avoid look ahead bias since we are using the Open to Close which
+# overlaps with the Close to Close
+rev_rets = sig.shift(1)*rets_IS[&amp;quot;Close&amp;quot;]
+cumsum(rev_rets).plot(figsize=(12, 8))
+plt.title(&amp;quot;Cumulative Return&amp;quot;)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;lt;matplotlib.text.Text at 0x7fb7b3efafd0&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img alt="png" src="2014-12-15_data-mining_files/2014-12-15_data-mining_20_1.png" /&gt;&lt;/p&gt;
+&lt;p&gt;Even without calculating performance metrics, you probably would realize you don't
+want to trade this strategy, but just for fun&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;print(IR(rev_rets))
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;0.0305600321502
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;def f(x, *params):
+    std_win, stdevs, hwin = x
+    ser, rets = params
+    ir_val = IR((rev_strat(ser, std_win, stdevs, hwin).shift(1)*rets))
+    return -ir_val
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;rranges = (slice(2, 91, 1), slice(1, 3.25, 0.25), slice(1, 31, 1))
+params = (rets_IS[&amp;quot;Day&amp;quot;], rets_IS[&amp;quot;Close&amp;quot;])
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;%timeit f((30, 1.5, 1), *params)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;100 loops, best of 3: 16.5 ms per loop
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The code below is fairly slow, on my machine it takes ~6.6 mins (89 * 9 * 31 * 0.0161 / 60)&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;grid_vals = scipy.optimize.brute(f, rranges, args=params, full_output=True)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Since scipy.optimize.brute minimizes a function, we have defined f as a function which returns negative IR,
+the optimal -IR for this strategy is show below&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;grid_vals[0]
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;array([  6.,   1.,  16.])
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;For the optimal signal, the path of cumulative returns is calculated&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;sig_opt = rev_strat(rets_IS[&amp;quot;Day&amp;quot;], grid_vals[0][0], grid_vals[0][1], grid_vals[0][2])
+# signal needs to be lagged by a day to avoid look ahead bias since we are using the Open to Close which
+# overlaps with the Close to Close
+rev_opt_rets = sig_opt.shift(1)*rets_IS[&amp;quot;Close&amp;quot;]
+cumsum(rev_opt_rets).plot(figsize=(12, 8))
+plt.title(&amp;quot;Cumulative Return of Optimal Strategy&amp;quot;)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;lt;matplotlib.text.Text at 0x7fb7b3ddec90&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img alt="png" src="2014-12-15_data-mining_files/2014-12-15_data-mining_31_1.png" /&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;irs = grid_vals[3].copy()
+irs[irs == 100] = 0
+irs = -irs
+b1 = np.percentile(irs, 20)
+b2 = np.percentile(irs, 80)
+mlab.pipeline.volume(mlab.pipeline.scalar_field(irs), vmin=b1, vmax=b2)
+mlab.axes(xlabel=&amp;quot;Std Window&amp;quot;, ylabel=&amp;quot;Std Threshold&amp;quot;, zlabel=&amp;quot;Holding Period&amp;quot;)
+mlab.colorbar()
+mlab.show()
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code class="language-python"&gt;Image('sensitivity.png', width=950)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;img alt="png" src="2014-12-15_data-mining_files/2014-12-15_data-mining_33_0.png" /&gt;&lt;/p&gt;
+&lt;p&gt;The idea with the graph above was to get a feel for how sensitive the IR was with respect to different parameter specifications, although admittedly this graph isn't very informative. The colorbar indicates the IR of the strategy for different parameter choices. The most sensitive choice is holding period, since there are sharp transitions across this axis. Another approach to check the stability of the model would be to perturb the optimal parameter choice (6, 1, 16) and examine the effects.&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;stdwins = [5,6,7]
+stddevs = [0.75, 1, 1.25]
+hwins = [15, 16, 17]
+
+df = pd.DataFrame()
+for i, params in enumerate(product(stdwins, stddevs, hwins)):
+    sig = rev_strat(rets_IS[&amp;quot;Day&amp;quot;], params[0], params[1], params[2])
+    rev_rets = sig.shift(1)*rets_IS[&amp;quot;Close&amp;quot;]
+    df[params] = rev_rets
+
+cumsum(df).plot(figsize=(17, 12))
+plt.legend(loc='upper left', ncol=2)
+plt.title(&amp;quot;Cumulative Return in Neighborhood of Optimal Strategy&amp;quot;)
+
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;lt;matplotlib.text.Text at 0x7fb7b086a050&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img alt="png" src="2014-12-15_data-mining_files/2014-12-15_data-mining_35_1.png" /&gt;&lt;/p&gt;
+&lt;h2&gt;Out of Sample&lt;/h2&gt;
+&lt;p&gt;Another way to determine whether a strategy performs well is to check the performance out of sample. Since we have deligently seperated our returns into two buckets, we can take the parameters chosen over the first subsample and evaluate the performance of the specified strategy on the second set of returns. As expected, the model performs terribly.&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;sig_os = rev_strat(rets_OS[&amp;quot;Day&amp;quot;], 6, 1, 16)
+rev_rets_os = sig_os.shift(1)*rets_OS[&amp;quot;Close&amp;quot;]
+IR(rev_rets_os)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;0.22769032485813084
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class="language-python"&gt;cumsum(rev_rets_os).plot(figsize=(12, 8))
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;lt;matplotlib.axes._subplots.AxesSubplot at 0x7fb7b3f77e10&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img alt="png" src="2014-12-15_data-mining_files/2014-12-15_data-mining_38_1.png" /&gt;&lt;/p&gt;
+&lt;script type="text/javascript"&gt;if (!document.getElementById('mathjaxscript_pelican_#%@#$@#')) {
+    var align = "center",
+        indent = "0em",
+        linebreak = "false";
+
+    if (false) {
+        align = (screen.width &lt; 768) ? "left" : align;
+        indent = (screen.width &lt; 768) ? "0em" : indent;
+        linebreak = (screen.width &lt; 768) ? 'true' : linebreak;
+    }
+
+    var mathjaxscript = document.createElement('script');
+    var location_protocol = (false) ? 'https' : document.location.protocol;
+    if (location_protocol !== 'http' &amp;&amp; location_protocol !== 'https') location_protocol = 'https:';
+    mathjaxscript.id = 'mathjaxscript_pelican_#%@#$@#';
+    mathjaxscript.type = 'text/javascript';
+    mathjaxscript.src = location_protocol + '//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML';
+    mathjaxscript[(window.opera ? "innerHTML" : "text")] =
+        "MathJax.Hub.Config({" +
+        "    config: ['MMLorHTML.js']," +
+        "    TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } }," +
+        "    jax: ['input/TeX','input/MathML','output/HTML-CSS']," +
+        "    extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']," +
+        "    displayAlign: '"+ align +"'," +
+        "    displayIndent: '"+ indent +"'," +
+        "    showMathMenu: true," +
+        "    messageStyle: 'normal'," +
+        "    tex2jax: { " +
+        "        inlineMath: [ ['\\\\(','\\\\)'] ], " +
+        "        displayMath: [ ['$$','$$'] ]," +
+        "        processEscapes: true," +
+        "        preview: 'TeX'," +
+        "    }, " +
+        "    'HTML-CSS': { " +
+        "        styles: { '.MathJax_Display, .MathJax .mo, .MathJax .mi, .MathJax .mn': {color: 'inherit ! important'} }," +
+        "        linebreaks: { automatic: "+ linebreak +", width: '90% container' }," +
+        "    }, " +
+        "}); " +
+        "if ('default' !== 'default') {" +
+            "MathJax.Hub.Register.StartupHook('HTML-CSS Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax['HTML-CSS'].FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+            "MathJax.Hub.Register.StartupHook('SVG Jax Ready',function () {" +
+                "var VARIANT = MathJax.OutputJax.SVG.FONTDATA.VARIANT;" +
+                "VARIANT['normal'].fonts.unshift('MathJax_default');" +
+                "VARIANT['bold'].fonts.unshift('MathJax_default-bold');" +
+                "VARIANT['italic'].fonts.unshift('MathJax_default-italic');" +
+                "VARIANT['-tex-mathit'].fonts.unshift('MathJax_default-italic');" +
+            "});" +
+        "}";
+    (document.body || document.getElementsByTagName('head')[0]).appendChild(mathjaxscript);
+}
+&lt;/script&gt;</summary></entry></feed>
